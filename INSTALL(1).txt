@@ -1,0 +1,161 @@
+服务端监听7000端口用来给客户端连接，6001端口用来向客户端下发shell指令
+服务端是控制端，客户端是被控端
+
+1、首先创建秘钥
+
+创建目录
+mkdir ca server
+
+生成server证书
+openssl genrsa -out ca/ca-key.pem 2048 
+
+创建证书请求
+openssl req -new -out ca/ca-req.csr -key ca/ca-key.pem  //openssl req -new -key server.key -out server.csr
+
+You are about to be asked to enter information that will be incorporated
+into your certificate request.
+What you are about to enter is what is called a Distinguished Name or a DN.
+There are quite a few fields but you can leave some blank
+For some fields there will be a default value,
+If you enter '.', the field will be left blank.
+-----
+Country Name (2 letter code) [AU]:US
+State or Province Name (full name) [Some-State]:NewYork
+Locality Name (eg, city) []:Buffalo
+Organization Name (eg, company) [Internet Widgits Pty Ltd]:AI
+Organizational Unit Name (eg, section) []:IT
+Common Name (e.g. server FQDN or YOUR name) []:rctl.shanliren.net
+Email Address []:rctl@shanliren.net
+
+Please enter the following 'extra' attributes
+to be sent with your certificate request
+A challenge password []:
+An optional company name []:
+root@ubuntu:~/rctl/ssl# openssl x509 -req -in ca/ca-req.csr -out ca/ca-cert.pem -signkey ca/ca-key.pem -days 3650
+Signature ok
+subject=/C=US/ST=NewYork/L=Buffalo/O=AI/OU=IT/CN=rctl.shanliren.net/emailAddress=rctl@shanliren.net
+Getting Private key
+
+//删除秘钥中的密码
+
+
+创建自签名证书
+openssl x509 -req -in ca/ca-req.csr -out ca/ca-cert.pem -signkey ca/ca-key.pem -days 3650
+
+================================================================================================
+生成server证书
+openssl genrsa -out server/server-key.pem 2048 
+
+
+创建证书请求
+openssl req -new -out server/server-req.csr -key server/server-key.pem
+
+You are about to be asked to enter information that will be incorporated
+into your certificate request.
+What you are about to enter is what is called a Distinguished Name or a DN.
+There are quite a few fields but you can leave some blank
+For some fields there will be a default value,
+If you enter '.', the field will be left blank.
+-----
+Country Name (2 letter code) [AU]:US
+State or Province Name (full name) [Some-State]:NewYork
+Locality Name (eg, city) []:Buffalo
+Organization Name (eg, company) [Internet Widgits Pty Ltd]:AI
+Organizational Unit Name (eg, section) []:IT
+Common Name (e.g. server FQDN or YOUR name) []:rctl.shanliren.net
+Email Address []:rctl@shanliren.net
+
+Please enter the following 'extra' attributes
+to be sent with your certificate request
+A challenge password []:
+An optional company name []:
+
+
+创建自签名证书
+openssl x509 -req -in server/server-req.csr -out server/server-cert.pem -signkey server/server-key.pem -CA ca/ca-cert.pem -CAkey ca/ca-key.pem -CAcreateserial -days 3650  
+
+
+以下client无需创建
+生成client证书 
+openssl genrsa -out client/client-key.pem 2048  
+openssl req -new -out client/client-req.csr -key client/client-key.pem 
+openssl x509 -req -in client/client-req.csr -out client/client-cert.pem -signkey client/client-key.pem -CA ca/ca-cert.pem -CAkey ca/ca-key.pem -CAcreateserial -days 3650
+
+
+拷贝
+cd server 
+mv server-cert.pem rctl_cert.pem
+mv server-key.pem rctl_priv.pem
+
+cd ca
+mv ca-cert.pem rctl_ca.crt
+
+
+服务器端
+mkdir -p /etc/rctl/certs
+cd server
+cp rctl_cert.pem rctl_priv.pem /etc/rctl/certs/
+
+cp ca/rctl_ca.crt /etc/rctl/certs/
+
+2、编译
+
+安装依赖
+apt-get install libssl-dev
+apt install libreadline-dev
+apt install gengetopt
+apt-get install libncurses-dev
+
+
+运行server
+./rctlser
+
+
+3、Client端
+
+拷贝证书
+mkdir -p /etc/rctl/certs
+cp rctl_ca.crt  /etc/rctl/certs/
+chown root.root /etc/rctl/certs/rctl_ca.crt
+
+运行
+./rctlcli --wan=eth0 --class=10
+
+参数解释：
+--wan 表示哪块网卡传输
+--class 表示一个集体，比如A公司一个集体，B公司另一个集体,如下
+
+1: list all class
+2: list all client
+3: send command to all client
+4: connect bash to client
+2
+10
+        6 : fe:fc:fe:38:ce:98 10.1.14.230
+        5 : 00:0c:29:06:b2:fe 10.1.14.137
+
+1: list all class
+2: list all client
+3: send command to all client
+4: connect bash to client
+
+以上表示名字class 10中有2台服务器
+
+对client机器（被管理机器）发送指令，执行shell命令, 使用MAC地址连接客户端机器
+1: list all class
+2: list all client
+3: send command to all client
+4: connect bash to client
+4
+Input mac:
+00:0c:29:06:b2:fe
+# ls
+bin   dev   initrd.img  lost+found  opt   run   srv  usr
+boot  etc   lib         media       proc  sbin  sys  var
+#
+
+-----------------------------
+客户端也可以使用配置文件
+cat /etc/rctl/rctlcli.cfg 
+w eth0
+c class1
